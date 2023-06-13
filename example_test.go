@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/oschwald/maxminddb-golang"
+	"github.com/ahfuzhang/maxminddb-golang"
 )
 
 // This example shows how to decode to a struct.
