@@ -23,7 +23,7 @@ func Test_ExampleReader_Lookup_struct(t *testing.T) {
 		} `maxminddb:"country"`
 	} // Or any appropriate struct
 	// 45.232.32.87  CL
-	arr := []string{"45.232.32.87", "42.84.232.144", "39.144.219.158", "81.2.69.142"}
+	arr := []string{"10.140.70.221", "246.80.248.86", "45.232.32.87", "42.84.232.144", "39.144.219.158", "81.2.69.142"}
 	for _, item := range arr {
 		ip := net.ParseIP(item)
 		err = db.Lookup(ip, &record)
@@ -31,7 +31,7 @@ func Test_ExampleReader_Lookup_struct(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		t.Logf("ip=%s, addr=%s", ip.String(), record.Country.ISOCode)
+		t.Logf("ip=%s, addr=[%s]", ip.String(), record.Country.ISOCode)
 	}
 	//fmt.Print(record.Country.ISOCode)
 	// Output:

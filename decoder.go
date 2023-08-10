@@ -755,7 +755,7 @@ func (d *decoder) decodeStruct(
 	}
 
 	// This handles named fields
-	for i := uint(0); i < size; i++ {
+	for i := uint(0); i < size; i++ { // 解析 map 的逐个字段
 		var (
 			err error
 			key []byte
@@ -766,7 +766,7 @@ func (d *decoder) decodeStruct(
 		}
 		// The string() does not create a copy due to this compiler
 		// optimization: https://github.com/golang/go/issues/3512
-		j, ok := fields.namedFields[string(key)]
+		j, ok := fields.namedFields[string(key)] // 是否是需要的字段
 		if !ok {
 			offset, err = d.nextValueOffset(offset, 1)
 			if err != nil {
@@ -900,7 +900,7 @@ func (d *decoder) nextValueOffset(offset, numberToSkip uint) (uint, error) {
 	default:
 		offset += size
 	}
-	return d.nextValueOffset(offset, numberToSkip-1)
+	return d.nextValueOffset(offset, numberToSkip-1) // 递归调用，直到想要跳过的内容全都跳过
 }
 
 // getBuffer for faster way to search data

@@ -887,7 +887,7 @@ func TestGetCountry(t *testing.T) {
 	// 220.255.1.166 singapore
 	// 116.179.33.17  cn
 	// ip=45.232.32.87, addr=CL
-	arr := []string{"45.232.32.87", "42.84.232.144", "39.144.219.158", "81.2.69.142"}
+	arr := []string{"45.232.32.87", "42.84.232.144", "39.144.219.158", "81.2.69.142", "240e:36b:2e5:fe00:448c:d3ac:2d45:309c"}
 	for _, s := range arr {
 		//s := "8.8.8.8"
 		ip := net.ParseIP(s)
@@ -900,6 +900,80 @@ func TestGetCountry(t *testing.T) {
 			t.Error("not found")
 			return
 		}
-		t.Logf("%+v", string(result))
+		t.Logf("ip=%s, %+v", ip.String(), string(result))
+	}
+}
+
+func TestGetCountryCompareWithOldMethod(t *testing.T) {
+	db := "test-data/test-data"
+	mmdb, err := Open(db)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	defer mmdb.Close()
+	//
+	var record struct {
+		Country struct {
+			ISOCode string `maxminddb:"iso_code"`
+		} `maxminddb:"country"`
+	}
+	for i := 0; i < 1000000; i++ {
+		s := fmt.Sprintf("%d.%d.%d.%d", rand.Intn(256), rand.Intn(256), rand.Intn(256), rand.Intn(256))
+		ip := net.ParseIP(s)
+		record.Country.ISOCode = ""
+		err = mmdb.Lookup(ip, &record)
+		if err != nil {
+			continue
+		}
+		//
+		result, err := mmdb.FastGetCountry(ip)
+		if err != nil {
+			t.Error(err.Error(), ip.String(), record.Country.ISOCode)
+			return
+		}
+		if result == nil && len(record.Country.ISOCode) > 0 {
+			t.Error("not found", ip.String(), record.Country.ISOCode)
+			return
+		}
+	}
+}
+
+func TestGetCountryCompareWithOldMethodForIPV6(t *testing.T) {
+	db := "test-data/test-data"
+	mmdb, err := Open(db)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	defer mmdb.Close()
+	//
+	var record struct {
+		Country struct {
+			ISOCode string `maxminddb:"iso_code"`
+		} `maxminddb:"country"`
+	}
+	arr := []string{"240e:419:7009:4468:1c766111:te68:det6",
+		"240e:476:fc3:4028::1",
+		"240e:36b:2e5:fe00:448c:d3ac:2d45:309c",
+	}
+	for _, s := range arr {
+		//s := fmt.Sprintf("%d.%d.%d.%d", rand.Intn(256), rand.Intn(256), rand.Intn(256), rand.Intn(256))
+		ip := net.ParseIP(s)
+		record.Country.ISOCode = ""
+		err = mmdb.Lookup(ip, &record)
+		if err != nil {
+			continue
+		}
+		//
+		result, err := mmdb.FastGetCountry(ip)
+		if err != nil {
+			t.Error(err.Error(), ip.String(), record.Country.ISOCode)
+			return
+		}
+		if result == nil && len(record.Country.ISOCode) > 0 {
+			t.Error("not found", ip.String(), record.Country.ISOCode)
+			return
+		}
 	}
 }
