@@ -886,15 +886,20 @@ func TestGetCountry(t *testing.T) {
 	defer mmdb.Close()
 	// 220.255.1.166 singapore
 	// 116.179.33.17  cn
-	ip := net.ParseIP("220.255.1.166")
-	result, err := mmdb.FastGetCountry(ip)
-	if err != nil {
-		t.Error(err.Error())
-		return
+	// ip=45.232.32.87, addr=CL
+	arr := []string{"45.232.32.87", "42.84.232.144", "39.144.219.158", "81.2.69.142"}
+	for _, s := range arr {
+		//s := "8.8.8.8"
+		ip := net.ParseIP(s)
+		result, err := mmdb.FastGetCountry(ip)
+		if err != nil {
+			t.Error(err.Error())
+			return
+		}
+		if result == nil {
+			t.Error("not found")
+			return
+		}
+		t.Logf("%+v", string(result))
 	}
-	if result == nil {
-		t.Error("not found")
-		return
-	}
-	t.Logf("%+v", string(result))
 }

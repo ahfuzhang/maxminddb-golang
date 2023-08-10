@@ -651,6 +651,13 @@ func (d *decoder) decodeMapToDeserializer(
 	return offset, nil
 }
 
+func (d *decoder) DecodePointer(
+	size uint,
+	offset uint,
+) (uint, uint, error) {
+	return d.decodePointer(size, offset)
+}
+
 func (d *decoder) decodePointer(
 	size uint,
 	offset uint,

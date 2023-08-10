@@ -320,27 +320,48 @@ func (r *Reader) readToLeaf(offset uint, paths []string) ([]byte, uint, error) {
 		buf := r.decoder.getBuffer()
 		s := buf[offset+1 : newOffset]
 		return s, newOffset, nil
+	} else if typeNum == _Pointer {
+		newOffset = newOffset + size
+		var pointer uint
+		var err error
+		pointer, newOffset, err = r.decoder.decodePointer(size, newOffset)
+		if err != nil {
+			return nil, 0, fmt.Errorf("decodePointer fail, err=%s", err.Error())
+		}
+		return r.readToLeaf(pointer, paths)
 	}
 	offset = newOffset
-	if typeNum != _Map {
-		return nil, offset, fmt.Errorf("support map only")
+	//
+	switch typeNum {
+	case _Bytes:
+		newOffset = newOffset + size
+		//
+		//arr,n := r.decoder.decodeBytes(size, offset)
+		//fmt.Printf()
+		//
+		buf := r.decoder.getBuffer()
+		s := buf[offset+1 : newOffset]
+		return s, newOffset, nil
+	case _Map:
+		for i := uint(0); i < size; i++ {
+			var key []byte
+			var err error
+			key, offset, err = r.decoder.DecodeKey(offset)
+			if err != nil {
+				return nil, offset, err
+			}
+			if string(key) == paths[0] {
+				return r.readToLeaf(offset, paths[1:])
+			}
+			offset, err = r.decoder.nextValueOffset(offset, 1)
+			if err != nil {
+				return nil, offset, err
+			}
+		}
+		return nil, offset, nil
+	default:
+		return nil, offset, fmt.Errorf("not support type %d", typeNum)
 	}
-	for i := uint(0); i < size; i++ {
-		var key []byte
-		var err error
-		key, offset, err = r.decoder.DecodeKey(offset)
-		if err != nil {
-			return nil, offset, err
-		}
-		if string(key) == paths[0] {
-			return r.readToLeaf(offset, paths[1:])
-		}
-		offset, err = r.decoder.nextValueOffset(offset, 1)
-		if err != nil {
-			return nil, offset, err
-		}
-	}
-	return nil, offset, nil
 }
 
 var countryPaths = []string{"country", "iso_code"}
