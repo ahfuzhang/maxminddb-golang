@@ -4,9 +4,10 @@ package maxminddb
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"net"
 	"reflect"
+	"strconv"
+	"unsafe"
 )
 
 const (
@@ -18,6 +19,13 @@ const (
 )
 
 var metadataStartMarker = []byte("\xAB\xCD\xEFMaxMind.com")
+
+var (
+	errOfLookupOffset  = errors.New("cannot call LookupOffset on a closed database")
+	errOfLookupNetwork = errors.New("cannot call Lookup on a closed database")
+	errOflookupPointer = errors.New("IP passed to Lookup cannot be nil")
+	errofDecode1       = errors.New("result param must be a pointer")
+)
 
 // Reader holds the data corresponding to the MaxMind DB file. Its only public
 // field is Metadata, which contains the metadata from the MaxMind DB file.
@@ -155,7 +163,7 @@ func (r *Reader) LookupNetwork(
 	result interface{},
 ) (network *net.IPNet, ok bool, err error) {
 	if r.buffer == nil {
-		return nil, false, errors.New("cannot call Lookup on a closed database")
+		return nil, false, errOfLookupNetwork
 	}
 	pointer, prefixLength, ip, err := r.lookupPointer(ip)
 
@@ -174,7 +182,7 @@ func (r *Reader) LookupNetwork(
 // previously-decoded records.
 func (r *Reader) LookupOffset(ip net.IP) (uintptr, error) {
 	if r.buffer == nil {
-		return 0, errors.New("cannot call LookupOffset on a closed database")
+		return 0, errOfLookupOffset
 	}
 	pointer, _, _, err := r.lookupPointer(ip)
 	if pointer == 0 || err != nil {
@@ -201,6 +209,8 @@ func (r *Reader) cidr(ip net.IP, prefixLength int) *net.IPNet {
 	return &net.IPNet{IP: ip.Mask(mask), Mask: mask}
 }
 
+var errOfDecode = errors.New("cannot call Decode on a closed database")
+
 // Decode the record at |offset| into |result|. The result value pointed to
 // must be a data value that corresponds to a record in the database. This may
 // include a struct representation of the data, a map capable of holding the
@@ -219,7 +229,7 @@ func (r *Reader) cidr(ip net.IP, prefixLength int) *net.IPNet {
 // clients to leverage this normalization in their own sub-record caching.
 func (r *Reader) Decode(offset uintptr, result interface{}) error {
 	if r.buffer == nil {
-		return errors.New("cannot call Decode on a closed database")
+		return errOfDecode
 	}
 	return r.decode(offset, result)
 }
@@ -227,7 +237,7 @@ func (r *Reader) Decode(offset uintptr, result interface{}) error {
 func (r *Reader) decode(offset uintptr, result interface{}) error {
 	rv := reflect.ValueOf(result)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return errors.New("result param must be a pointer")
+		return errofDecode1
 	}
 
 	if dser, ok := result.(deserializer); ok {
@@ -241,7 +251,7 @@ func (r *Reader) decode(offset uintptr, result interface{}) error {
 
 func (r *Reader) lookupPointer(ip net.IP) (uint, int, net.IP, error) {
 	if ip == nil {
-		return 0, 0, nil, errors.New("IP passed to Lookup cannot be nil")
+		return 0, 0, nil, errOflookupPointer
 	}
 
 	ipV4Address := ip.To4()
@@ -249,10 +259,12 @@ func (r *Reader) lookupPointer(ip net.IP) (uint, int, net.IP, error) {
 		ip = ipV4Address
 	}
 	if len(ip) == 16 && r.Metadata.IPVersion == 4 {
-		return 0, 0, ip, fmt.Errorf(
-			"error looking up '%s': you attempted to look up an IPv6 address in an IPv4-only database",
-			ip.String(),
-		)
+		var temp [256]byte
+		buf := temp[:0]
+		buf = append(buf, "error looking up '"...)
+		buf = append(buf, ip.String()...)
+		buf = append(buf, "': you attempted to look up an IPv6 address in an IPv4-only database"...)
+		return 0, 0, ip, errors.New(B2s(buf))
 	}
 
 	bitCount := uint(len(ip) * 8)
@@ -270,8 +282,8 @@ func (r *Reader) lookupPointer(ip net.IP) (uint, int, net.IP, error) {
 	} else if node > nodeCount {
 		return node, prefixLength, ip, nil
 	}
-
-	return 0, prefixLength, ip, newInvalidDatabaseError("invalid node in search tree")
+	e := InvalidDatabaseError{message: "invalid node in search tree"}
+	return 0, prefixLength, ip, e
 }
 
 func (r *Reader) traverseTree(ip net.IP, node, bitCount uint) (uint, int) {
@@ -304,9 +316,21 @@ func (r *Reader) resolveDataPointer(pointer uint) (uintptr, error) {
 	resolved := uintptr(pointer - r.Metadata.NodeCount - dataSectionSeparatorSize)
 
 	if resolved >= uintptr(len(r.buffer)) {
-		return 0, newInvalidDatabaseError("the MaxMind DB file's search tree is corrupt")
+		e := InvalidDatabaseError{message: "the MaxMind DB file's search tree is corrupt"}
+		return 0, e
 	}
 	return resolved, nil
+}
+
+// b2s converts byte slice to a string without memory allocation.
+// See https://groups.google.com/forum/#!msg/Golang-Nuts/ENgbUzYvCuU/90yGx7GUAgAJ .
+func B2s(b []byte) string {
+	return unsafe.String(unsafe.SliceData(b), len(b))
+}
+
+// s2b converts string to a byte slice without memory allocation.
+func S2b(s string) []byte {
+	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
 // readToLeaf read the tree till leaf node
@@ -347,18 +371,20 @@ func (r *Reader) readToLeaf(offset uint, paths []string) ([]byte, uint, error) {
 	case _String:
 		var value string
 		value, offset = r.decoder.decodeString(size, offset)
-		return []byte(value), offset, nil
+		return S2b(value), offset, nil
 	default:
-		return nil, offset, fmt.Errorf("not support type %d", typeNum)
+		return nil, offset, errors.New("not support type " + strconv.Itoa(int(typeNum)))
 	}
 }
 
 var countryPaths = []string{"country", "iso_code"}
 
+var errOfCloseDB = errors.New("cannot call Lookup on a closed database")
+
 // FastGetCountry when we need country only, this func is 2.91 times faster than Lookup
 func (r *Reader) FastGetCountry(ip net.IP) ([]byte, error) {
 	if r.buffer == nil {
-		return nil, errors.New("cannot call Lookup on a closed database")
+		return nil, errOfCloseDB
 	}
 	pointer, _, _, err := r.lookupPointer(ip)
 	if pointer == 0 || err != nil {

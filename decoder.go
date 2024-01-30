@@ -735,7 +735,7 @@ func (d *decoder) decodeSliceToDeserializer(
 
 func (d *decoder) decodeString(size, offset uint) (string, uint) {
 	newOffset := offset + size
-	return string(d.buffer[offset:newOffset]), newOffset
+	return B2s(d.buffer[offset:newOffset]), newOffset
 }
 
 func (d *decoder) decodeStruct(

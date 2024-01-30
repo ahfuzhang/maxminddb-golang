@@ -977,3 +977,30 @@ func TestGetCountryCompareWithOldMethodForIPV6(t *testing.T) {
 		}
 	}
 }
+
+// go test -benchmem -run=^$ -bench ^BenchmarkCountryCodeFast1$ github.com/ahfuzhang/maxminddb-golang
+/*
+go test -benchmem -run=^$ -bench ^BenchmarkCountryCodeFast1$  \
+            -benchtime=10s -cpu=4 \
+		    -cpuprofile=p1.pprof \
+		    github.com/ahfuzhang/maxminddb-golang
+
+go tool pprof -http=":8087" p1.pprof
+
+100.7 ns/op	       0 B/op	       0 allocs/op  最初
+99.66 ns/op            0 B/op          0 allocs/op 尝试解决栈逃逸
+*/
+func BenchmarkCountryCodeFast1(b *testing.B) {
+	db := "test-data/test-data"
+	mmdb, err := Open(db)
+	if err != nil {
+		b.Error(err.Error())
+		return
+	}
+	defer mmdb.Close()
+	ip := net.ParseIP("42.84.232.144")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = mmdb.FastGetCountry(ip)
+	}
+}
